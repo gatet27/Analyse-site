@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vince Kawaï — Extracteur produits</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f8ff;color:#24364b}
+main{max-width:1100px;margin:auto;padding:28px 16px 60px}h1{text-align:center;font-size:clamp(30px,6vw,52px);margin:20px 0 8px}.sub{text-align:center;color:#64778d;margin:0 auto 25px;max-width:720px}
+.box{background:#fff;border:1px solid #d7e9fb;border-radius:22px;padding:18px;box-shadow:0 12px 35px #5b8fbd14}
+.url{padding:14px;border-radius:12px;background:#f5faff;overflow-wrap:anywhere;font-weight:600}
+button{border:0;border-radius:14px;padding:14px 18px;font-size:16px;font-weight:800;cursor:pointer}.pink{background:#82b9e8;color:white;width:100%;margin-top:12px}.soft{background:#e7f3ff;color:#45647f}
+#status{margin-top:13px;line-height:1.45;color:#64778d}.tools{display:none;justify-content:space-between;align-items:center;gap:10px;margin:22px 0 13px}.tools.on{display:flex}.buttons{display:flex;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:13px}.card{background:#fff;border:2px solid transparent;border-radius:18px;overflow:hidden;box-shadow:0 7px 20px #4f7fa812;position:relative}.card.sel{border-color:#82b9e8}.card img{display:block;width:100%;aspect-ratio:1;object-fit:contain}.name{padding:11px;font-size:14px;font-weight:750;line-height:1.3}.tick{position:absolute;right:9px;top:9px;background:white;border:2px solid #82b9e8;width:29px;height:29px;border-radius:50%;display:grid;place-items:center}.sel .tick{background:#82b9e8;color:white}
+#zip{display:none;margin:24px auto 0;max-width:430px}#zip.on{display:block}.warn{font-size:12px;color:#7890a6;margin-top:12px}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,1fr)}.tools{align-items:flex-start;flex-direction:column}}
+</style></head><body><main>
+<h1>🌸 Vince Kawaï</h1><p class="sub">Récupère la première image de chaque produit avec son nom, puis télécharge tout dans un seul fichier ZIP.</p>
+<section class="box"><div class="url">https://vince-kawai.base44.app/</div>
+<button id="scan" class="pink">🔎 Analyser Vince Kawaï</button>
+<div id="status">Prêt à analyser le catalogue.</div>
+<div class="warn">Le navigateur doit être autorisé par Vince Kawaï à lire ses données. Si Base44 bloque l’accès inter-site, une version avec passerelle serveur sera nécessaire.</div></section>
+<div id="tools" class="tools"><b id="count"></b><div class="buttons"><button class="soft" id="all">Tout</button><button class="soft" id="none">Aucun</button></div></div>
+<div id="grid" class="grid"></div><button id="zip" class="pink">📦 Créer le fichier ZIP</button>
+</main>
+<script>
+const SITE="https://vince-kawai.base44.app/";
+let items=[];
+const $=x=>document.querySelector(x);
+function abs(x){try{return new URL(x,SITE).href}catch{return""}}
+function clean(x){return (x||"produit").replace(/[\\/:*?"<>|]/g," ").replace(/\s+/g," ").trim().slice(0,120)}
+function add(a,n,i){i=abs(i);n=(n||"").trim();if(n&&i&&!a.some(x=>x.name===n&&x.image===i))a.push({name:n,image:i,selected:true})}
+function extract(html){
+ const d=new DOMParser().parseFromString(html,"text/html"),a=[];
+ d.querySelectorAll('script[type="application/ld+json"]').forEach(s=>{try{
+  const walk=o=>{if(!o)return;if(Array.isArray(o))return o.forEach(walk);if(typeof o!=="object")return;
+   let t=o["@type"];if(t==="Product"||(Array.isArray(t)&&t.includes("Product"))){let im=Array.isArray(o.image)?o.image[0]:o.image;if(im&&typeof im==="object")im=im.url||im.contentUrl;add(a,o.name,im)}
+   Object.values(o).forEach(v=>{if(v&&typeof v==="object")walk(v)})};walk(JSON.parse(s.textContent))
+ }catch{}});
+ d.querySelectorAll('article,[class*="product"],[class*="Product"],[data-product],[class*="card"]').forEach(c=>{
+  let im=c.querySelector("img");if(!im)return;let src=im.currentSrc||im.getAttribute("src")||im.getAttribute("data-src")||im.getAttribute("data-lazy-src");
+  let n=c.querySelector("h1,h2,h3,h4,[class*='name'],[class*='title']")?.textContent||im.alt;add(a,n,src)
+ });
+ return a.slice(0,1000)
+}
+function render(){
+ $("#grid").innerHTML="";items.forEach((p,i)=>{let c=document.createElement("div");c.className="card sel";
+ c.innerHTML='<div class="tick">✓</div><img loading="lazy"><div class="name"></div>';c.querySelector("img").src=p.image;c.querySelector(".name").textContent=p.name;
+ c.onclick=()=>{p.selected=!p.selected;c.classList.toggle("sel",p.selected);c.querySelector(".tick").textContent=p.selected?"✓":"";update()};$("#grid").appendChild(c)});
+ $("#tools").classList.toggle("on",!!items.length);$("#zip").classList.toggle("on",!!items.length);update()
+}
+function update(){let n=items.filter(x=>x.selected).length;$("#count").textContent=`${items.length} produits • ${n} sélectionnés`;$("#zip").textContent=`📦 Créer le ZIP — ${n} images`;$("#zip").disabled=!n}
+$("#scan").onclick=async()=>{let b=$("#scan");b.disabled=true;$("#status").textContent="Analyse en cours…";items=[];render();
+ try{let r=await fetch(SITE,{credentials:"omit"});if(!r.ok)throw Error("HTTP "+r.status);let h=await r.text();items=extract(h);if(!items.length)throw Error("les produits ne sont pas présents dans le HTML initial");render();$("#status").textContent=`✅ ${items.length} produits trouvés. Tu peux vérifier les photos puis créer le ZIP.`}
+ catch(e){$("#status").textContent="❌ Base44 empêche l’analyse directe depuis ce fichier HTML, ou charge le catalogue après ouverture de l’application. Dans ce cas le HTML seul ne peut pas contourner cette protection. Détail : "+e.message}finally{b.disabled=false}};
+$("#all").onclick=()=>{items.forEach(x=>x.selected=true);render()};$("#none").onclick=()=>{items.forEach(x=>x.selected=false);render()};
+$("#zip").onclick=async()=>{let list=items.filter(x=>x.selected),z=new JSZip(),used={},ok=0;$("#zip").disabled=true;
+ for(let p of list){try{let r=await fetch(p.image,{credentials:"omit"});if(!r.ok)throw 0;let blob=await r.blob(),ext=(blob.type.split("/")[1]||"jpg").replace("jpeg","jpg").replace("svg+xml","svg"),n=clean(p.name);used[n]=(used[n]||0)+1;if(used[n]>1)n+="_"+used[n];z.file(n+"."+ext,blob);ok++;$("#status").textContent=`Préparation du ZIP : ${ok}/${list.length}`;}catch{}}
+ if(!ok){$("#status").textContent="❌ Les serveurs d’images bloquent leur téléchargement direct depuis le navigateur.";$("#zip").disabled=false;return}
+ let blob=await z.generateAsync({type:"blob"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="Vince-Kawai-Produits.zip";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);$("#status").textContent=`✅ ZIP créé avec ${ok} images.`;$("#zip").disabled=false};
+</script></body></html>
